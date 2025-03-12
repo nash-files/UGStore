@@ -1,0 +1,96 @@
+// Firestore rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow users to read their own data
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow users to read/write their own subcollections
+      match /{subcollection}/{docId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // Allow all authenticated users to read approved resources
+    match /resources/{resourceId} {
+      allow read: if 
+        // Anyone can read approved resources
+        resource.data.status == 'approved' ||
+        // Creators can read their own resources
+        (request.auth != null && resource.data.creatorId == request.auth.uid) ||
+        // Admins can read all resources
+        (request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      
+      // Only creators can create resources
+      allow create: if 
+        request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'creator' &&
+        request.resource.data.creatorId == request.auth.uid;
+      
+      // Only resource owners or admins can update resources
+      allow update: if 
+        request.auth != null && 
+        (resource.data.creatorId == request.auth.uid || 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      
+      // Only resource owners or admins can delete resources
+      allow delete: if 
+        request.auth != null && 
+        (resource.data.creatorId == request.auth.uid || 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+    
+    // Allow all authenticated users to read categories
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Allow users to read/write their own purchases
+    match /purchases/{purchaseId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false; // Purchases should not be updated or deleted
+    }
+  }
+}
+
+// Storage rules
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow users to read approved resource files and thumbnails
+    match /resources/{resourceId}_{timestamp}_{filename} {
+      allow read: if 
+        // Check if the resource is approved
+        firestore.get(/databases/(default)/documents/resources/$(resourceId)).data.status == 'approved' ||
+        // Or if the user is the creator
+        (request.auth != null && 
+         firestore.get(/databases/(default)/documents/resources/$(resourceId)).data.creatorId == request.auth.uid);
+      
+      // Only allow creators to upload resource files
+      allow write: if 
+        request.auth != null && 
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'creator';
+    }
+    
+    // Allow users to read thumbnails
+    match /thumbnails/{resourceId}_{timestamp}_{filename} {
+      allow read: if true;
+      
+      // Only allow creators to upload thumbnails
+      allow write: if 
+        request.auth != null && 
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'creator';
+    }
+    
+    // Allow users to read/write their own avatars
+    match /avatars/{userId}_{timestamp}_{filename} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+
