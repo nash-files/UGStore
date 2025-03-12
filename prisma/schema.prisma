@@ -1,0 +1,100 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
+}
+
+model Profile {
+  id            String    @id @db.Uuid
+  name          String?
+  role          String?   @default("user")
+  creatorStatus String?   @map("creator_status")
+  avatarUrl     String?   @map("avatar_url")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  
+  resources           Resource[]
+  creatorApplications CreatorApplication[]
+  purchases           Purchase[]
+  analyticsEvents     AnalyticsEvent[]
+
+  @@map("profiles")
+}
+
+model Resource {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  title       String
+  description String
+  price       Decimal  @db.Decimal(10, 2)
+  category    String
+  creatorId   String   @map("creator_id") @db.Uuid
+  tags        String[] @default([])
+  thumbnail   String?
+  fileUrl     String?  @map("file_url")
+  fileName    String?  @map("file_name")
+  fileType    String?  @map("file_type")
+  fileSize    BigInt?  @map("file_size")
+  status      String   @default("pending")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  downloads   Int      @default(0)
+  views       Int      @default(0)
+  featured    Boolean  @default(false)
+  
+  creator         Profile          @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  purchases       Purchase[]
+  analyticsEvents AnalyticsEvent[]
+
+  @@map("resources")
+}
+
+model CreatorApplication {
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  portfolioUrl    String?  @map("portfolio_url")
+  experience      String?
+  applicationText String?  @map("application_text")
+  status          String   @default("pending")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("creator_applications")
+}
+
+model Purchase {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  resourceId String   @map("resource_id") @db.Uuid
+  amount     Decimal  @db.Decimal(10, 2)
+  status     String   @default("pending")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  
+  user     Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@map("purchases")
+}
+
+model AnalyticsEvent {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  eventType  String   @map("event_type")
+  userId     String?  @map("user_id") @db.Uuid
+  resourceId String?  @map("resource_id") @db.Uuid
+  data       Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  
+  user     Profile?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  resource Resource? @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+
+  @@map("analytics_events")
+}
+
